@@ -111,17 +111,17 @@ func FindAllPermission() ([]models.Permission, error) {
 }
 
 // Find roles of each permission
-// @param models.Permission
+// @param string
 // @return []models.Role
-func Roles(permissions ...models.Permission) ([]models.Role, error) {
+func Roles(permissions ...string) ([]models.Role, error) {
 	var roles []models.Role
 	var allRole []models.Role
 	for _, permission := range permissions {
-		_, err := FindPermissionById(permission.ID)
+		per, err := FindPermissionByName(permission)
 		if err != nil {
 			return nil, errors.New("PERMISSION DOESN'T EXIST")
 		}
-		conn.DB.Model(&permission).Association("Roles").Find(&roles)
+		conn.DB.Model(&per).Association("Roles").Find(&roles)
 		allRole = append(allRole, roles...)
 	}
 	return allRole, nil
@@ -129,7 +129,7 @@ func Roles(permissions ...models.Permission) ([]models.Role, error) {
 
 // find Permission By Name and Show each with Role
 // @param string
-// @return odels.Permission, error
+// @return models.Permission, error
 func FindPermissionByName(name string) (models.Permission, error) {
 	var permission models.Permission
 	res := conn.DB.Where("name = ?", name).Preload("Roles").First(&permission)
@@ -204,7 +204,7 @@ func RemoveRoleByIdFromPermission(permissionId uint, roleId uint) (bool, error) 
 // Revoke the given role by name for permission
 // @param uint, string
 // @return bool, error
-func RemoveRoleByNameFromPermission(permissionName uint, roleName string) (bool, error) {
+func RemoveRoleByNameFromPermission(permissionId uint, roleName string) (bool, error) {
 	var role models.Role
 	var permission models.Permission
 
@@ -214,14 +214,14 @@ func RemoveRoleByNameFromPermission(permissionName uint, roleName string) (bool,
 			return false, errors.New("ROLE NOT FOUND")
 		}
 	}
-	res = conn.DB.Where("name = ?", permissionName).First(&permission)
+	res = conn.DB.Where("id = ?", permissionId).First(&permission)
 	if res.Error != nil {
 		if errors.Is(res.Error, gorm.ErrRecordNotFound) {
 			return false, errors.New("PERMISSSION NOT FOUND")
 		}
 	}
 
-	error := conn.DB.Model(&permission).Association("ROles").Delete(&role)
+	error := conn.DB.Model(&permission).Association("Roles").Delete(&role)
 	if error != nil {
 		return false, error
 	}
@@ -286,10 +286,11 @@ func RemoveAllRoleFromPermission(permissionId uint) (bool, error) {
 }
 
 // Remove all current Permission role and set the given ones.
-// @param uint, models.Role
+// @param uint, string
 // @return []models.Role, error
-func SyncRolesFromPermission(permissionId uint, roles ...models.Role) ([]models.Role, error) {
+func SyncRolesFromPermission(permissionId uint, roles ...string) ([]models.Role, error) {
 	var permission models.Permission
+	rolesModel := []models.Role{}
 
 	res := conn.DB.Where("id = ?", permissionId).First(&permission)
 	if res.Error != nil {
@@ -297,11 +298,21 @@ func SyncRolesFromPermission(permissionId uint, roles ...models.Role) ([]models.
 			return nil, errors.New("RECORD NOT FOUND")
 		}
 	}
-	error := conn.DB.Model(&permission).Association("Roles").Replace(&roles)
+
+	for _, roleName := range roles {
+		role, err := FindRoleByName(roleName)
+		if err != nil {
+			return rolesModel, errors.New("ROLE DOESN'T EXIST")
+		} else {
+			rolesModel = append(rolesModel, role)
+		}
+	}
+
+	error := conn.DB.Model(&permission).Association("Roles").Replace(rolesModel)
 	if error != nil {
 		return nil, error
 	}
-	return roles, nil
+	return rolesModel, nil
 }
 
 // Find All Role
@@ -319,14 +330,13 @@ func FindAllRole() ([]models.Role, error) {
 }
 
 // Return all Permissions the Role.
-// @param []models.Role
+// @param string
 // @return []models.Permission
-func Permissions(roles []models.Role) ([]models.Permission, error) {
-
+func Permissions(roles ...string) ([]models.Permission, error) {
 	var permissions []models.Permission
 	var allPermission []models.Permission
 	for _, role := range roles {
-		_, err := FindRoleById(role.ID)
+		_, err := FindRoleByName(role)
 		if err != nil {
 			return nil, errors.New("ROLE DOESN'T EXIST")
 		}
@@ -341,7 +351,7 @@ func Permissions(roles []models.Role) ([]models.Permission, error) {
 // @return models.Role, error
 func FindRoleByName(name string) (models.Role, error) {
 	var role models.Role
-	res := conn.DB.Where("name = ?", name).Preload("Permissions").First(&role)
+	res := conn.DB.Where("name = ?", name).First(&role)
 	if res.Error != nil {
 		if errors.Is(res.Error, gorm.ErrRecordNotFound) {
 			return role, errors.New("RECORD NOT FOUND")
@@ -479,7 +489,7 @@ func RemovePermissionFromRole(roleId uint, permission models.Permission) (bool, 
 // Return the number of Role permissions.
 // @param uint
 // @return int64, error
-func CountPermission(roleId uint) (int64, error) {
+func CountPermissionFromRole(roleId uint) (int64, error) {
 	var role models.Role
 
 	res := conn.DB.Where("id = ?", roleId).First(&role)
@@ -515,10 +525,11 @@ func RemoveAllPermissionFromRole(roleId uint) (bool, error) {
 }
 
 // Remove all current role Permission and set the given ones.
-// @param uint, models.Permission
+// @param uint, string
 // @return []models.Permission, error
-func SyncPermissionsFromRole(roleId uint, permissions ...models.Permission) ([]models.Permission, error) {
+func SyncPermissionsFromRole(roleId uint, permissions ...string) ([]models.Permission, error) {
 	var role models.Role
+	permissionModels := []models.Permission{}
 
 	res := conn.DB.Where("id = ?", roleId).First(&role)
 	if res.Error != nil {
@@ -527,11 +538,21 @@ func SyncPermissionsFromRole(roleId uint, permissions ...models.Permission) ([]m
 		}
 		return nil, res.Error
 	}
-	error := conn.DB.Model(&role).Association("Permissions").Replace(&permissions)
+
+	for _, permissionName := range permissions {
+		permission, err := FindPermissionByName(permissionName)
+		if err != nil {
+			return permissionModels, errors.New("PERMISSION DOESN'T EXIST")
+		} else {
+			permissionModels = append(permissionModels, permission)
+		}
+	}
+
+	error := conn.DB.Model(&role).Association("Permissions").Replace(&permissionModels)
 	if error != nil {
 		return nil, error
 	}
-	return permissions, nil
+	return permissionModels, nil
 }
 
 // Assign the given Permissions to the Role.
@@ -556,9 +577,9 @@ func AssignPermissionsFromRole(roleId uint, permissions ...models.Permission) ([
 }
 
 // Determine if the Role may perform the given permission.
-// @param uint, uint
+// @param uint, string
 // @return models.Permission, error
-func HasPermissionTo(roleId uint, permissionId uint) (models.Permission, error) {
+func HasPermissionTo(roleId uint, permissionName string) (models.Permission, error) {
 	var role models.Role
 
 	res := conn.DB.Where("id = ?", roleId).First(&role)
@@ -568,9 +589,14 @@ func HasPermissionTo(roleId uint, permissionId uint) (models.Permission, error) 
 		}
 		return models.Permission{}, res.Error
 	}
-
 	var permission models.Permission
-	error := conn.DB.Model(&role).Where("permission_id = ?", permissionId).Association("Permissions").Find(&permission)
+
+	permissionId, error := FindPermissionByName(permissionName)
+	if error != nil {
+		return permission, error
+	}
+
+	error = conn.DB.Model(&role).Where("permission_id = ?", permissionId.ID).Association("Permissions").Find(&permission)
 	if error != nil {
 		return permission, error
 	}
@@ -650,7 +676,7 @@ func GetAllPermissions(userID uint) ([]models.Permission, error) {
 		return nil, res.Error
 	}
 
-	var roles []models.Role
+	var roles []string
 	for _, r := range userRoles {
 		var role models.Role
 		res := conn.DB.Where("id = ?", r.RoleID).Find(&role)
@@ -661,10 +687,10 @@ func GetAllPermissions(userID uint) ([]models.Permission, error) {
 			return nil, res.Error
 		}
 		if res.Error == nil {
-			roles = append(roles, role)
+			roles = append(roles, role.Name)
 		}
 	}
-	permissions, error := Permissions(roles)
+	permissions, error := Permissions(roles...)
 	if error != nil {
 		return nil, error
 	}
@@ -673,9 +699,16 @@ func GetAllPermissions(userID uint) ([]models.Permission, error) {
 
 // Assign the given roles to the User.
 // @param uint, models.Role
-// @return bool
-func AssignRoles(userID uint, Roles ...models.Role) bool {
+// @return bool, error
+func AssignRoles(userID uint, Roles ...models.Role) (bool, error) {
 	var userRole models.UserRoles
+
+	for _, role := range Roles {
+		_, err := FindRoleById(role.ID)
+		if err != nil {
+			return false, errors.New("ROLE DOESN'T EXIST")
+		}
+	}
 
 	for _, role := range Roles {
 		conn.DB.FirstOrCreate(&userRole, models.UserRoles{
@@ -683,7 +716,7 @@ func AssignRoles(userID uint, Roles ...models.Role) bool {
 			RoleID: role.ID,
 		})
 	}
-	return true
+	return true, nil
 }
 
 // Revoke the given role by id for user
@@ -837,9 +870,9 @@ func HasAllPermission(userID uint, permissionsName ...string) (bool, error) {
 }
 
 // Determine if the User has of the given permissions name.
-// @param uint, []string
+// @param uint, string
 // @return bool, error
-func HasAnyPermissions(userID uint, permissionsName []string) (bool, error) {
+func HasAnyPermissions(userID uint, permissionsName ...string) (bool, error) {
 	permissions, error := GetAllPermissions(userID)
 	if error != nil {
 		return false, error
