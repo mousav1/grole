@@ -229,9 +229,9 @@ func RemoveRoleByNameFromPermission(permissionId uint, roleName string) (bool, e
 }
 
 // Revoke the given role for permission
-// @param uint, models.Role
+// @param uint, string
 // @return bool, error
-func RemoveRoleFromPermission(permissionId uint, role models.Role) (bool, error) {
+func RemoveRoleFromPermission(permissionId uint, roleName string) (bool, error) {
 	var permission models.Permission
 
 	res := conn.DB.Where("id = ?", permissionId).First(&permission)
@@ -241,7 +241,12 @@ func RemoveRoleFromPermission(permissionId uint, role models.Role) (bool, error)
 		}
 	}
 
-	error := conn.DB.Model(&permission).Association("Roles").Delete(&role)
+	findRole, err := FindRoleByName(roleName)
+	if err != nil {
+		return false, errors.New("ROLE DOESN'T EXIST")
+	}
+
+	error := conn.DB.Model(&permission).Association("Roles").Delete(&findRole)
 	if error != nil {
 		return false, error
 	}
@@ -464,28 +469,6 @@ func RemovePermissionByNameFromRole(roleName string, permissionName string) (boo
 	return true, nil
 }
 
-// Revoke the given Permission for Role
-// @param uint, roles
-// @return bool, error
-func RemovePermissionFromRole(roleId uint, permission models.Permission) (bool, error) {
-	var role models.Role
-
-	res := conn.DB.Where("id = ?", roleId).First(&role)
-	if res.Error != nil {
-		if errors.Is(res.Error, gorm.ErrRecordNotFound) {
-			return false, errors.New("RECORD NOT FOUND")
-		}
-		return false, res.Error
-	}
-
-	error := conn.DB.Model(&role).Association("Permissions").Delete(&permission)
-
-	if error != nil {
-		return false, error
-	}
-	return true, nil
-}
-
 // Return the number of Role permissions.
 // @param uint
 // @return int64, error
@@ -556,10 +539,11 @@ func SyncPermissionsFromRole(roleId uint, permissions ...string) ([]models.Permi
 }
 
 // Assign the given Permissions to the Role.
-// @param uint, models.Permission
+// @param uint, string
 // @return []models.Permission, error
-func AssignPermissionsFromRole(roleId uint, permissions ...models.Permission) ([]models.Permission, error) {
+func AssignPermissionsFromRole(roleId uint, permissions ...string) ([]models.Permission, error) {
 	var role models.Role
+	permissionModels := []models.Permission{}
 
 	res := conn.DB.Where("id = ?", roleId).First(&role)
 	if res.Error != nil {
@@ -569,11 +553,20 @@ func AssignPermissionsFromRole(roleId uint, permissions ...models.Permission) ([
 		return nil, res.Error
 	}
 
-	error := conn.DB.Model(&role).Association("Permissions").Append(&permissions)
+	for _, permissionName := range permissions {
+		permission, err := FindPermissionByName(permissionName)
+		if err != nil {
+			return permissionModels, errors.New("PERMISSION DOESN'T EXIST")
+		} else {
+			permissionModels = append(permissionModels, permission)
+		}
+	}
+
+	error := conn.DB.Model(&role).Association("Permissions").Append(&permissionModels)
 	if error != nil {
 		return nil, error
 	}
-	return permissions, nil
+	return permissionModels, nil
 }
 
 // Determine if the Role may perform the given permission.
@@ -698,24 +691,22 @@ func GetAllPermissions(userID uint) ([]models.Permission, error) {
 }
 
 // Assign the given roles to the User.
-// @param uint, models.Role
+// @param uint, string
 // @return bool, error
-func AssignRoles(userID uint, Roles ...models.Role) (bool, error) {
+func AssignRoles(userID uint, Roles ...string) (bool, error) {
 	var userRole models.UserRoles
 
-	for _, role := range Roles {
-		_, err := FindRoleById(role.ID)
+	for _, roleName := range Roles {
+		role, err := FindRoleByName(roleName)
 		if err != nil {
 			return false, errors.New("ROLE DOESN'T EXIST")
 		}
-	}
-
-	for _, role := range Roles {
 		conn.DB.FirstOrCreate(&userRole, models.UserRoles{
 			UserID: userID,
 			RoleID: role.ID,
 		})
 	}
+
 	return true, nil
 }
 
@@ -749,19 +740,6 @@ func RemoveRoleByNameFromUser(userID uint, roleName string) (bool, error) {
 	return true, nil
 }
 
-// Revoke the given role for user
-// @param uint, models.Role
-// @return bool, error
-func RemoveRoleFromUser(userID uint, role models.Role) (bool, error) {
-	res := conn.DB.Where("user_id = ?", userID).Where("role_id = ?", role.ID).Delete(&models.UserRoles{})
-	if res.Error != nil {
-		return false, res.Error
-	} else if res.RowsAffected < 1 {
-		return false, errors.New("CANNOT BE DELETED BECAUSE IT DOESN'T EXIST")
-	}
-	return true, nil
-}
-
 // Remove all current roles for user.
 // @param uint
 // @return bool, error
@@ -776,9 +754,9 @@ func RemoveAllRoleFromUser(userID uint) (bool, error) {
 }
 
 // Remove all current user roles and set the given ones.
-// @param uint, models.Role
+// @param uint, string
 // @return bool, error
-func SyncRolesFromUser(userID uint, Roles ...models.Role) (bool, error) {
+func SyncRolesFromUser(userID uint, Roles ...string) (bool, error) {
 	res := conn.DB.Where("user_id = ?", userID).Delete(&models.UserRoles{})
 	if res.Error != nil {
 		return false, res.Error
@@ -786,7 +764,11 @@ func SyncRolesFromUser(userID uint, Roles ...models.Role) (bool, error) {
 		return false, errors.New("CANNOT BE DELETED BECAUSE IT DOESN'T EXIST")
 	}
 
-	for _, role := range Roles {
+	for _, roleName := range Roles {
+		role, err := FindRoleByName(roleName)
+		if err != nil {
+			return false, errors.New("ROLE DOESN'T EXIST")
+		}
 		conn.DB.Create(&models.UserRoles{
 			UserID: userID,
 			RoleID: role.ID,
