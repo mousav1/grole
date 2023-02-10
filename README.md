@@ -47,7 +47,7 @@ After installed you can do things like this:
 
 
 // find Permission or Create Permission If not found
-err = grole.FindOrCreatePermission(models.Permission{
+permission, err := grole.FindOrCreatePermission(models.Permission{
 		Name:        "manage-articles",
 		Description: "test",
 	})
@@ -55,7 +55,7 @@ err = grole.FindOrCreatePermission(models.Permission{
 
 
 // update the given permission
-err = grole.UpdatePermission(1, models.Permission{
+ok, err := grole.UpdatePermission(1, models.Permission{
 		Name:        "manage-articles",
 		Description: "update test",
 	})
