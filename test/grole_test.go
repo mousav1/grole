@@ -22,7 +22,38 @@ func TestFindOrCreatePermission(t *testing.T) {
 	require.NotEmpty(t, permission)
 	require.Equal(t, "manage-articles", permission.Name)
 	require.Equal(t, "test", permission.Description)
-
 	require.NotZero(t, permission.ID)
-	db.Where("name = ?", "manage-articles").Delete(models.Permission{})
+
+	grole.DeletePermission(permission.ID)
+}
+
+func TestUpdatePermission(t *testing.T) {
+	grole.New(grole.Options{
+		DB: db,
+	})
+
+	oldPermission, errCreateOldPermission := grole.FindOrCreatePermission(models.Permission{
+		Name:        "manage-articles",
+		Description: "test",
+	})
+
+	_, errUpdatePermission := grole.UpdatePermission(oldPermission.ID, models.Permission{
+		Name:        "manage-articles-update",
+		Description: "update test update",
+	})
+
+	newPermission, errNewPermission := grole.FindPermissionById(oldPermission.ID)
+
+	require.NoError(t, errCreateOldPermission)
+	require.NoError(t, errUpdatePermission)
+	require.NoError(t, errNewPermission)
+	require.NotEmpty(t, newPermission)
+	require.NotZero(t, newPermission.ID)
+	require.Equal(t, "manage-articles-update", newPermission.Name)
+	require.Equal(t, "update test update", newPermission.Description)
+	require.NotEqual(t, oldPermission.Name, newPermission.Name)
+	require.NotEqual(t, oldPermission.Description, newPermission.Description)
+	require.NotZero(t, oldPermission.ID)
+
+	grole.DeletePermission(oldPermission.ID)
 }

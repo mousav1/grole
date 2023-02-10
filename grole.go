@@ -85,8 +85,8 @@ func DeletePermission(permissionId uint) (bool, error) {
 // update the given permission
 // @param uint
 // @return bool, error
-func UpdatePermission(permissionId uint, newRole models.Permission) (bool, error) {
-	res := conn.DB.Where("id = ?", permissionId).Updates(models.Permission{Name: newRole.Name, Description: newRole.Description})
+func UpdatePermission(permissionId uint, newPermission models.Permission) (bool, error) {
+	res := conn.DB.Where("id = ?", permissionId).Updates(models.Permission{Name: newPermission.Name, Description: newPermission.Description})
 	if res.Error != nil {
 		return false, res.Error
 	} else if res.RowsAffected < 1 {
