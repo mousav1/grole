@@ -57,3 +57,29 @@ func TestUpdatePermission(t *testing.T) {
 
 	grole.DeletePermission(oldPermission.ID)
 }
+
+func TestDeletePermission(t *testing.T) {
+	grole.New(grole.Options{
+		DB: db,
+	})
+
+	permission, error := grole.FindOrCreatePermission(models.Permission{
+		Name:        "manage-articles",
+		Description: "test",
+	})
+
+	findPermission, errFindPermission := grole.FindPermissionById(permission.ID)
+
+	require.NoError(t, error)
+	require.NoError(t, errFindPermission)
+	require.NotEmpty(t, findPermission)
+	require.NotZero(t, findPermission.ID)
+	require.Equal(t, permission.Name, findPermission.Name)
+	require.Equal(t, permission.Description, findPermission.Description)
+	require.NotZero(t, permission.ID)
+
+	grole.DeletePermission(permission.ID)
+
+	_, errNewPermissionDelete := grole.FindPermissionById(permission.ID)
+	require.EqualError(t, errNewPermissionDelete, "RECORD NOT FOUND")
+}

@@ -63,7 +63,7 @@ ok, err := grole.UpdatePermission(1, models.Permission{
 
 
 // delete the given permission
-err = grole.DeletePermission(1)
+ok, err = grole.DeletePermission(1)
 // output (bool, error) => true <nil>
 
 
